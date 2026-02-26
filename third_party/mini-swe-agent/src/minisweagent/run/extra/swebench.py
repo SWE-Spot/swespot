@@ -17,6 +17,7 @@ import yaml
 from datasets import load_dataset
 from jinja2 import StrictUndefined, Template
 from rich.live import Live
+import docker
 
 from minisweagent import Environment
 from minisweagent.agents.default import DefaultAgent
@@ -26,6 +27,9 @@ from minisweagent.models import get_model
 from minisweagent.run.extra.utils.batch_progress import RunBatchProgressManager
 from minisweagent.run.utils.save import save_traj
 from minisweagent.utils.log import add_file_handler, logger
+
+import warnings
+warnings.filterwarnings("ignore", message="Pydantic serializer warnings")
 
 _HELP_TEXT = """Run mini-SWE-agent on SWEBench instances.
 
@@ -69,6 +73,16 @@ class ProgressTrackingAgent(DefaultAgent):
 def get_swebench_docker_image_name(instance: dict) -> str:
     """Get the image name for a SWEBench instance."""
     image_name = instance.get("image_name", None)
+
+    if image_name is None:
+        client = docker.from_env()
+        try:
+            image_name_cached_by_eval = f'sweb.eval.x86_64.{instance["instance_id"]}:latest'
+            client.images.get(image_name_cached_by_eval)
+            image_name = image_name_cached_by_eval
+        except docker.errors.ImageNotFound:
+            pass
+    
     if image_name is None:
         # Docker doesn't allow double underscore, so we replace them with a magic token
         iid = instance["instance_id"]
@@ -85,6 +99,7 @@ def get_sb_environment(config: dict, instance: dict) -> Environment:
         env_config["image"] = image_name
     elif env_config["environment_class"] == "singularity":
         env_config["image"] = "docker://" + image_name
+    env_config['run_args'] = ['--rm', '--memory', '4096m']
     env = get_environment(env_config)
     if startup_command := config.get("run", {}).get("env_startup_command"):
         startup_command = Template(startup_command, undefined=StrictUndefined).render(**instance)
@@ -149,7 +164,7 @@ def process_instance(
             instance_id=instance_id,
             **config.get("agent", {}),
         )
-        exit_status, result = agent.run(task)
+        exit_status, result = agent.run(task, **instance)
     except Exception as e:
         logger.error(f"Error processing instance {instance_id}: {e}", exc_info=True)
         exit_status, result = type(e).__name__, str(e)
@@ -195,8 +210,9 @@ def main(
     split: str = typer.Option("dev", "--split", help="Dataset split", rich_help_panel="Data selection"),
     slice_spec: str = typer.Option("", "--slice", help="Slice specification (e.g., '0:5' for first 5 instances)", rich_help_panel="Data selection"),
     filter_spec: str = typer.Option("", "--filter", help="Filter instance IDs by regex", rich_help_panel="Data selection"),
+    instance_ids_paths: list[Path] = typer.Option([], "--instance-ids-paths", help="Paths to json files containing instance IDs to run", rich_help_panel="Data selection"),
     shuffle: bool = typer.Option(False, "--shuffle", help="Shuffle instances", rich_help_panel="Data selection"),
-    output: str = typer.Option("", "-o", "--output", help="Output directory", rich_help_panel="Basic"),
+    output: str = typer.Option("output", "-o", "--output", help="Output directory", rich_help_panel="Basic"),
     workers: int = typer.Option(1, "-w", "--workers", help="Number of worker threads for parallel processing", rich_help_panel="Basic"),
     model: str | None = typer.Option(None, "-m", "--model", help="Model to use", rich_help_panel="Basic"),
     model_class: str | None = typer.Option(None, "--model-class", help="Model class to use (e.g., 'anthropic' or 'minisweagent.models.anthropic.AnthropicModel')", rich_help_panel="Advanced"),
@@ -212,7 +228,18 @@ def main(
 
     dataset_path = DATASET_MAPPING.get(subset, subset)
     logger.info(f"Loading dataset {dataset_path}, split {split}...")
-    instances = list(load_dataset(dataset_path, split=split))
+    # instances = list(load_dataset(dataset_path, split=split))
+    if dataset_path.endswith(".jsonl"):
+        instances = list(load_dataset('json', data_files=dataset_path, split='train'))
+    else:
+        instances = list(load_dataset(dataset_path, split=split))
+
+    if instance_ids_paths:
+        instance_ids = set()
+        for instance_ids_path in instance_ids_paths:
+            instance_ids.update(json.loads(Path(instance_ids_path).read_text()))
+        instances = list(filter(lambda x: x["instance_id"] in instance_ids, instances))
+    logger.info(f'Selected: {len(instances) = }')
 
     instances = filter_instances(instances, filter_spec=filter_spec, slice_spec=slice_spec, shuffle=shuffle)
     if not redo_existing and (output_path / "preds.json").exists():

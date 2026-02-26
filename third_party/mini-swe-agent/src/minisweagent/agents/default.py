@@ -69,6 +69,7 @@ class DefaultAgent:
         self.model = model
         self.env = env
         self.extra_template_vars = {}
+        self.model_msg_appearances = {}
 
     def render_template(self, template: str, **kwargs) -> str:
         template_vars = asdict(self.config) | self.env.get_template_vars() | self.model.get_template_vars()
@@ -78,6 +79,8 @@ class DefaultAgent:
 
     def add_message(self, role: str, content: str, **kwargs):
         self.messages.append({"role": role, "content": content, "timestamp": time.time(), **kwargs})
+        content = content.strip()
+        self.model_msg_appearances[content] = self.model_msg_appearances.get(content, 0) + 1
 
     def run(self, task: str, **kwargs) -> tuple[str, str]:
         """Run step() until agent is finished. Return exit status & message"""
@@ -115,6 +118,19 @@ class DefaultAgent:
 
     def parse_action(self, response: dict) -> dict:
         """Parse the action from the message. Returns the action."""
+
+        # prevent repetition first
+        model_msg = response["content"].strip()
+        occurrences = self.model_msg_appearances[model_msg]
+        assert occurrences >= 1
+        if occurrences >= 5:
+            raise LimitsExceeded('repeated too many times')
+        if occurrences >= 3:
+            output_ls = self.env.execute("ls -lh /testbed")["output"]
+            raise FormatError(
+                f"<warning>\n[SYSTEM ALERT: REPETITION AND LOOP DETECTED] You repeated the same response for {occurrences} times! That is, you responded with the same THOUGHT and bash command for {occurrences} times in this session! You are very likely to be stuck in a loop, rather than making meaningful progress.\n[GUIDANCE] STOP! Do NOT repeat the same actions again! Reflect on your previous attempts, examine your current progress of solving this task, demonstrate meaningful thoughts towards completing this task, and try actions (bash commands) leading to meaningful, real progress.\nBelow is the output of `ls -lh /testbed` for your reference:\n<output>\n{output_ls}\n</output>\nBut next, you should try to deliver non-repetitive, meaningful thought and actions!\n</warning>"
+            )
+
         actions = re.findall(self.config.action_regex, response["content"], re.DOTALL)
         if len(actions) == 1:
             return {"action": actions[0].strip(), **response}
