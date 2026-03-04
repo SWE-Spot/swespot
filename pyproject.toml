@@ -15,6 +15,7 @@ dependencies = [
     "fire",
     "loguru",
     "natsort",
+    "mini-swe-agent",
     "swebench",
     "swesmith",
     "tddbench",
@@ -51,6 +52,7 @@ dev = [
 
 
 [tool.uv.sources]
+mini-swe-agent = { path = "third_party/mini-swe-agent", editable = true }
 swebench = { path = "third_party/SWE-bench", editable = true }
 tddbench = { path = "third_party/TDD-Bench-Verified", editable = true }
 feaswebench = { path = "third_party/fea-swe-bench", editable = true }
