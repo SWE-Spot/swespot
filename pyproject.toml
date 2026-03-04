@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "swespot"
+version = "0.1.0"
+description = "SWE Spot"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "sb-cli",
+    "p_tqdm",
+    "docker",
+    "fire",
+    "loguru",
+    "natsort",
+    "swebench",
+    "swesmith",
+    "tddbench",
+    "feaswebench",
+]
+
+[project.optional-dependencies]
+
+[tool.uv]
+override-dependencies = [
+]
+
+[dependency-groups]
+dev = [
+    "datasets",
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "pytest-xdist",
+    "pre-commit",
+    "ruff",
+    "mkdocs-include-markdown-plugin",
+    "mkdocstrings[python]>=0.18",
+    "mike",
+    "mkdocs-material",
+    "mkdocs-glightbox",
+    "mkdocs-redirects",
+    "portkey-ai",
+    "ipython",
+    "google-cloud-aiplatform",
+    "fastapi",
+    "vertexai",
+]
+
+
+[tool.uv.sources]
+swebench = { path = "third_party/SWE-bench", editable = true }
+tddbench = { path = "third_party/TDD-Bench-Verified", editable = true }
+feaswebench = { path = "third_party/fea-swe-bench", editable = true }
