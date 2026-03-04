@@ -1,25 +1,27 @@
+# on the GPU node:
+# CUDA_VISIBLE_DEVICES=0 python3 -m sglang.launch_server --model-path Qwen/Qwen3-4B-Instruct-2507 --served-model-name qwen34i --tensor-parallel-size 1 --data-parallel-size 1 --tool-call-parser qwen25 --mem-fraction-static 0.90 --host 0.0.0.0 --port 8001 --api-key swespot --context-length 48000
+
+# on the evaluation node:
+# VERSION=0 WORKERS=6 MS=qwen34i CONFIG=eval/sbv_host.yaml REPO=django HASH=e13b714 eval/sbv.sh
+
 set -x
 
-PORT=${PORT:-0}
 MS=${MS:-unknown}
 MODEL=${MODEL:-openai/$MS}
 MODEL_CLASS=${MODEL_CLASS:-litellm}
 REPO=${REPO:-django}
 HASH=${HASH:-e13b714}
 VERSION=${VERSION:-1}
-CONFIG=${CONFIG:-configs/bugfix/host.yaml}
+CONFIG=${CONFIG:-eval/sbv_host.yaml}
 WORKERS=${WORKERS:-12}
 RUN_EVAL=${RUN_EVAL:-true}
 
 REPO_HASH=${REPO}_${HASH}
-OUTPUT_DIR=evals/bugfix/$REPO_HASH/$MS/v$VERSION
-RUN_ID=bugfix_${REPO_HASH}_${MS}_v${VERSION}
-
-wc -l /home/colin/code/repotune/data/eval/sbv/$REPO.jsonl
-sleep 3s
+OUTPUT_DIR=eval_results/sbv/$REPO_HASH/$MS/v$VERSION
+RUN_ID=sbv_${REPO_HASH}_${MS}_v${VERSION}
 
 uv run mini-extra swebench -c $CONFIG --workers $WORKERS \
-    --subset /home/colin/code/repotune/data/eval/sbv/$REPO.jsonl \
+    --subset eval/data/sbv/$REPO.jsonl \
     --model $MODEL \
     --model-class $MODEL_CLASS \
     --remote-port-selection $PORT \
@@ -39,11 +41,7 @@ if [ "$RUN_EVAL" = "true" ]; then
     mv logs/run_evaluation/$RUN_ID $OUTPUT_DIR/logs
     mv *$RUN_ID.json $OUTPUT_DIR/
 
-    uv run tools/eval_loc.py --pred_file $OUTPUT_DIR/preds.json 2>&1 | tee -a $OUTPUT_DIR/report.log
-
-    uv run tools/stat.py run --eval_dir $OUTPUT_DIR | tee -a $OUTPUT_DIR/report.log
-
     grep _instances $OUTPUT_DIR/*$RUN_ID.json | tee -a $OUTPUT_DIR/report.log
 else
-    echo 'skipping evaluation'
+    echo 'skipping evaluation after generation'
 fi
