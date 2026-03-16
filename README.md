@@ -71,3 +71,4 @@ An example script for training the Django expert model: `train/mix_django.sh`
 - The dataset is available at https://huggingface.co/datasets/swespot/sft-v0 . Clone it somewhere, and set the environment variable `DATA_DIR` to the path of the cloned dataset in the script: `export DATA_DIR=/path/to/swespot-sft-v0-hf-repo` .
 - Similarly, you can train expert models for other repositories.
 
+Example trained models for the seven selected repositories in the paper can be found at [Hugging Face](https://huggingface.co/swespot/models), such as https://huggingface.co/swespot/django-sft-v0 .
