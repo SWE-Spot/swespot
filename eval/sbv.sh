@@ -24,7 +24,6 @@ uv run mini-extra swebench -c $CONFIG --workers $WORKERS \
     --subset eval/data/sbv/$REPO.jsonl \
     --model $MODEL \
     --model-class $MODEL_CLASS \
-    --remote-port-selection $PORT \
     --output $OUTPUT_DIR
 
 if [ "$RUN_EVAL" = "true" ]; then
